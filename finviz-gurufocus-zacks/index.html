@@ -2,45 +2,177 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Stock Ticker Dashboard</title>
+<title>Value Investing Scanner</title>
+
 <style>
-  body { font-family: sans-serif; background:#0f1020; color:#e7e8f1; padding:24px; }
-  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap:16px; }
-  .card { padding:12px; background:#12142a; border-radius:12px; text-align:center; cursor:pointer; }
-  .card:hover { background:#1b1c33; }
+    :root { --p1:#667eea; --p2:#764ba2; --bg:#0f1020; --card:#12142a; --txt:#e7e8f1; --muted:#a8a9b8; }
+    body { font-family: Segoe UI, Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, var(--p1), var(--p2)); padding: 24px; color: var(--txt); }
+
+    .wrap { max-width: 1200px; margin: 0 auto; background:#0d0f1a; border-radius:16px; padding-bottom:20px; }
+    .hdr { padding: 28px 24px; background: rgba(255,255,255,0.05); }
+
+    .title { font-size: 28px; font-weight: 800; }
+
+    .input-url { width:100%; padding:12px; border-radius:12px; border:1px solid #333; background:#0b0d18; color:var(--txt); margin-top:10px; }
+
+    .btn-main { margin-top:10px; padding:12px 18px; border-radius:12px; border:1px solid rgba(255,255,255,.2); background: var(--p1); color:white; cursor:pointer; font-weight:700; }
+
+    .controls { display:flex; gap:12px; margin-top:14px; }
+    .search { flex:1; }
+    .input { width:100%; padding:10px 14px; border-radius: 10px; border:1px solid rgba(255,255,255,.15); background:#0b0d18; color:var(--txt); }
+
+    .btn { padding:10px 14px; border-radius: 10px; border:1px solid rgba(255,255,255,.2); background:transparent; color:var(--txt); cursor:pointer; font-weight:600; }
+    .btn.active { background: linear-gradient(135deg, var(--p1), var(--p2)); border-color: transparent; }
+
+    .content { padding:20px; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap:16px; }
+
+    .card { position:relative; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.1); border-radius:14px; padding:18px; text-align:center; cursor:pointer; }
+    .card:hover { transform: translateY(-4px); box-shadow: 0 12px 30px rgba(0,0,0,.35); }
+    .card::after { content:""; position:absolute; inset:0; background: radial-gradient(600px 120px at var(--mx,50%) var(--my,0%), rgba(255,255,255,.15), transparent 40%); opacity:0; transition:opacity .2s; }
+    .card:hover::after { opacity:1; }
+
+    .sym { font-size: 22px; font-weight: 900; }
+    .lbl { font-size: 11px; color: var(--muted); }
+    .rank { margin-top:8px; font-size: 13px; }
+    .price-rank {
+        margin-top: 6px;
+        font-size: 13px;
+        color: #e7e8f1;
+    }
+
+    .predictability-stars {
+        margin-top: 6px;
+        font-size: 14px;
+        color: #facc15; /* golden stars */
+        font-weight: 700;
+        letter-spacing: 1px;
+    }
+
+    /* spinner */
+    .spinner {
+        margin-top:20px;
+        display:none;
+        text-align:center;
+    }
 </style>
 </head>
 <body>
-<h1>📊 Stock Ticker Dashboard</h1>
-<input id="search" placeholder="Search tickers..." />
-<div id="grid" class="grid"></div>
+
+<div class="wrap">
+
+    <div class="hdr">
+        <div class="title">📊 Value Investing with DCF & Strong Buy & Buy Signals Scanner</div>
+
+        <input id="finvizUrl" class="input-url" placeholder="Paste your Finviz screener URL">
+
+        <button class="btn-main" onclick="runScan()">Scan</button>
+
+        <!-- 🔵 Loading Spinner -->
+        <div id="spinner" class="spinner">
+            <div class="spinner-border" style="width:40px;height:40px;border:4px solid #fff;border-right-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+        </div>
+
+        <style>
+            @keyframes spin { 100% { transform: rotate(360deg); } }
+        </style>
+
+        <div class="controls">
+            <div class="search"><input id="q" class="input" placeholder="Search tickers..." oninput="filterTickers()"></div>
+            <button class="btn active" id="viewGrid" onclick="toGrid()">Grid</button>
+            <button class="btn" id="viewList" onclick="toList()">List</button>
+        </div>
+    </div>
+
+    <div class="content">
+        <div id="g" class="grid"></div>
+    </div>
+
+</div>
 
 <script>
-async function loadTickers() {
-  const res = await fetch("/.netlify/functions/fetchTickers");
-  const data = await res.json();
+async function runScan() {
+    const url = document.getElementById("finvizUrl").value;
+    if (!url) return alert("Enter a Finviz URL");
 
-  if (data.error) {
-    document.getElementById("grid").innerHTML = `<p>${data.error}</p>`;
-    return;
-  }
+    const spinner = document.getElementById("spinner");
+    spinner.style.display = "block";
 
-  const grid = document.getElementById("grid");
-  const tickers = data.tickers;
+    const res = await fetch("/.netlify/functions/fetchTickers?url=" + encodeURIComponent(url));
+    const data = await res.json();
 
-  function render(filtered = tickers) {
-    grid.innerHTML = filtered.map(t => `<div class="card" data-t="${t}">${t}</div>`).join("");
-  }
+    spinner.style.display = "none";
 
-  render();
+    let list = data.filtered.map(x => {
+        const rankNum = parseInt(x.rank, 10);
 
-  document.getElementById("search").addEventListener("input", e => {
-    const val = e.target.value.toUpperCase();
-    render(tickers.filter(t => t.includes(val)));
-  });
+        return {
+            ticker: x.ticker,
+            rank: rankNum,
+            label: rankNum === 1 ? "Strong Buy" :
+                   rankNum === 2 ? "Buy" : "Unknown",
+	    price: x.price,
+	    iv_dcEarning: x.iv_dcEarning,
+            marginOfSafety: x.marginOfSafety,
+            predictability: x.predictability,
+        };
+    });
+
+    // 🔥 Sort: Strong Buy → Buy
+    list.sort((a, b) => a.rank - b.rank);
+
+    const grid = document.getElementById("g");
+    grid.innerHTML = "";
+
+    list.forEach((item, idx) => {
+        const div = document.createElement("div");
+        div.className = "card";
+        div.setAttribute("data-t", item.ticker);
+
+        div.innerHTML = `
+            <div class="sym">${item.ticker}</div>
+            <div class="lbl">${item.label}</div>
+	    <div class="price-rank">Price: ${item.price}</div>
+            <div class="price-rank">Fair Value: ${item.iv_dcEarning}</div>
+            <div class="price-rank">MoS: ${item.marginOfSafety}%</div>
+            <div class="predictability-stars">Predictability: ${getStars(item.predictability)} (${item.predictability})</div>
+        `;
+
+        div.addEventListener("click", () => navigator.clipboard.writeText(item.ticker));
+
+        grid.appendChild(div);
+    });
 }
 
-loadTickers();
+function filterTickers() {
+    const v = document.getElementById("q").value.toUpperCase();
+    const cards = document.querySelectorAll(".card");
+
+    cards.forEach(c => {
+        const t = c.getAttribute("data-t");
+        c.style.display = t.includes(v) ? "" : "none";
+    });
+}
+
+function toGrid() {
+    const grid = document.getElementById("g");
+    grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(128px, 1fr))";
+    document.getElementById('viewGrid').classList.add('active');
+    document.getElementById('viewList').classList.remove('active');
+}
+
+function toList() {
+    const grid = document.getElementById("g");
+    grid.style.gridTemplateColumns = "1fr";
+    document.getElementById('viewList').classList.add('active');
+    document.getElementById('viewGrid').classList.remove('active');
+}
+
+function getStars(value) {
+    const fullStars = Math.floor(value); // e.g., 2 -> 2 stars
+    return "★".repeat(fullStars) + "☆".repeat(5 - fullStars); // always 5 max
+}
 </script>
+
 </body>
 </html>
