@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Stock Ticker Dashboard</title>
+<style>
+  body { font-family: sans-serif; background:#0f1020; color:#e7e8f1; padding:24px; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap:16px; }
+  .card { padding:12px; background:#12142a; border-radius:12px; text-align:center; cursor:pointer; }
+  .card:hover { background:#1b1c33; }
+</style>
+</head>
+<body>
+<h1>📊 Stock Ticker Dashboard</h1>
+<input id="search" placeholder="Search tickers..." />
+<div id="grid" class="grid"></div>
+
+<script>
+async function loadTickers() {
+  const res = await fetch("/.netlify/functions/fetchTickers");
+  const data = await res.json();
+
+  if (data.error) {
+    document.getElementById("grid").innerHTML = `<p>${data.error}</p>`;
+    return;
+  }
+
+  const grid = document.getElementById("grid");
+  const tickers = data.tickers;
+
+  function render(filtered = tickers) {
+    grid.innerHTML = filtered.map(t => `<div class="card" data-t="${t}">${t}</div>`).join("");
+  }
+
+  render();
+
+  document.getElementById("search").addEventListener("input", e => {
+    const val = e.target.value.toUpperCase();
+    render(tickers.filter(t => t.includes(val)));
+  });
+}
+
+loadTickers();
+</script>
+</body>
+</html>
